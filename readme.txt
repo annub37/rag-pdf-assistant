@@ -1,57 +1,94 @@
-Upload any PDF — a resume, a research paper, a legal contract, whatever. 
-Ask a question in plain English. Get a grounded answer back, 
-with a confidence score and the source page number it came from.
+RAG PDF Assistant
+==================
+
+Upload any PDF — a resume, a research paper, a legal contract — ask a
+question in plain English, and get a grounded answer back with the source
+page number it came from.
 
 
-A practical RAG PDF Assistant has 6 layers:
-
-Ingestion: upload PDFs, extract text, split into chunks, attach metadata.
-Embedding: convert chunks into vectors using an embedding model.
-Storage: save vectors in a vector DB and document metadata in an app DB.
-Retrieval: embed the user query, fetch top relevant chunks, optionally rerank.
-Generation: send the query plus retrieved context to an LLM.
-Application: chat UI, auth, document management, feedback, logging.
-
-
-flowchart LR
-    U[User] --> UI[Web UI / Chat UI]
-    UI --> API[Backend API]
-
-    API --> AUTH[Auth & Session]
-    API --> CHAT[Chat Orchestrator]
-    API --> DOC[Document Service]
-
-    DOC --> UPLOAD[PDF Upload]
-    UPLOAD --> PARSE[PDF Parser / OCR]
-    PARSE --> CHUNK[Chunking + Metadata]
-    CHUNK --> EMBED[Embedding Model]
-    EMBED --> VDB[(Vector DB)]
-    CHUNK --> MDB[(Metadata DB)]
-
-    CHAT --> QEMBED[Query Embedding]
-    QEMBED --> VDB
-    VDB --> RET[Retriever]
-    MDB --> RET
-    RET --> RERANK[Reranker optional]
-    RERANK --> PROMPT[Prompt Builder]
-    UI --> API
-    API --> CHAT
-    PROMPT --> LLM[LLM]
-    LLM --> RESP[Answer + Citations]
-    RESP --> UI
-
-    CHAT --> LOG[Logs / Traces / Feedback]
-    LOG --> OBS[Observability]
+How It Works
+------------
+1. Upload a PDF.
+2. The backend extracts text, splits it into chunks, and creates embeddings.
+3. Chunks are stored in a vector database.
+4. When you ask a question, the query is embedded and matched against stored chunks.
+5. The most relevant chunks are sent to an LLM along with your question.
+6. You get an answer with citations pointing back to the source pages.
 
 
+Active Structure
+----------------
+backend/                  → Python FastAPI service
+backend/app/main.py       → App entrypoint — creates FastAPI instance, includes routers
+backend/app/config.py     → Central settings (reads from environment variables)
+backend/app/routes/       → API route modules (one file per feature)
+backend/app/routes/health.py → Health-check endpoint (GET /health)
+backend/requirements.txt  → Python dependencies
+backend/.env.example      → Documents required environment variables
 
-    For an MVP, use this stack:
+frontend/                 → UI (not started yet)
 
-Frontend: React or Next.js
-Backend: FastAPI or Node.js/Express
-PDF parsing: PyMuPDF or pdfplumber
-OCR for scanned PDFs: Tesseract or Azure Document Intelligence
-Embeddings: OpenAI text-embedding-3-large or a local sentence-transformer
-Vector DB: pgvector, Qdrant, or Pinecone
-LLM: GPT-4.1 / GPT-5-class API or local Llama/Mistral
-Cache/queue: Redis if ingestion becomes asynchronous
+.env                      → Local secrets (gitignored, never committed)
+.gitignore                → Files excluded from version control
+
+
+Run Locally
+-----------
+1. Clone the repo:
+   git clone <repo-url>
+   cd rag-pdf-assistant
+
+2. Create a virtual environment (recommended):
+   python -m venv venv
+   venv\Scripts\activate        (Windows)
+   source venv/bin/activate     (Mac/Linux)
+
+3. Install backend dependencies:
+   pip install -r backend/requirements.txt
+
+4. Set up environment variables:
+   copy backend\.env.example .env
+   (edit .env and fill in your values)
+
+5. Start the backend:
+   cd backend
+   python -m uvicorn app.main:app --reload
+
+6. Open http://127.0.0.1:8000/health
+   You should see: {"status": "ok", "environment": "development"}
+
+7. View auto-generated API docs:
+   http://127.0.0.1:8000/docs
+
+
+Environment Variables
+---------------------
+Variable      Default                    Description
+--------      -------                    -----------
+APP_NAME      RAG PDF Assistant API      Application title shown in API docs
+APP_ENV       development                Current environment (development / production)
+
+
+Tech Stack (Current)
+--------------------
+- Python 3.12+
+- FastAPI (web framework)
+- Uvicorn (ASGI server)
+
+
+Tech Stack (Planned)
+--------------------
+- PDF parsing: PyMuPDF or pdfplumber
+- OCR: Tesseract or Azure Document Intelligence
+- Embeddings: OpenAI text-embedding-3-large
+- Vector DB: pgvector or Qdrant
+- LLM: OpenAI GPT-4.1 / GPT-5
+- Frontend: React or Next.js
+
+
+Notes
+-----
+- The backend and frontend have separate dependency files.
+- The .env file contains secrets and is never committed to git.
+- Query execution will be restricted to read-only operations for safety.
+- Each new feature gets its own route file in backend/app/routes/.
