@@ -47,7 +47,8 @@ Run Locally
    pip install -r backend/requirements.txt
 
 4. Set up environment variables:
-   copy backend\.env.example .env
+   copy backend\.env.example .env   (Windows)
+   cp backend/.env.example .env     (Mac/Linux)
    (edit .env and fill in your values)
 
 5. Start the backend:
