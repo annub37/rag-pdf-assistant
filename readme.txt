@@ -52,7 +52,7 @@ Run Locally
 
 5. Start the backend:
    cd backend
-   python -m uvicorn app.main:app --reload
+   python -m uvicorn app.main:app --reload --env-file ../.env
 
 6. Open http://127.0.0.1:8000/health
    You should see: {"status": "ok", "environment": "development"}
