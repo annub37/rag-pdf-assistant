@@ -39,14 +39,22 @@ async def chat(body: ChatRequest):
     # Step 4: Send to LLM and get the answer
     answer = ask_llm(messages)
 
-    # Step 5: Return answer with source references
+    # Step 5: Return answer with source references + confidence score
     sources = [
         {"page_number": c["page_number"], "file_id": c["file_id"], "distance": c["distance"]}
         for c in chunks
     ]
 
+    # Confidence = average of (1 - distance) across all chunks.
+    # ChromaDB cosine distance: 0 = identical, 2 = opposite.
+    # So (1 - distance) gives us a 0-to-1 confidence per chunk.
+    avg_confidence = sum(1 - c["distance"] for c in chunks) / len(chunks)
+    # Clamp between 0 and 1 (just in case)
+    avg_confidence = max(0.0, min(1.0, avg_confidence))
+
     return {
         "question": body.question,
         "answer": answer,
+        "confidence": round(avg_confidence, 4),
         "sources": sources,
     }

@@ -77,6 +77,22 @@ with st.sidebar:
         st.write(f"**Pages:** {info['total_pages']}")
         st.write(f"**Chunks:** {info['total_chunks']}")
 
+    # ─── SUMMARIZE BUTTON ────────────────────────────────────────
+    # WHY always visible? The PDF might have been uploaded via API/terminal,
+    # not just through the UI. So we always show this button.
+    st.divider()
+    if st.button("📝 Summarize PDF", use_container_width=True):
+        st.session_state["_summarize"] = True
+
+# ─── HANDLE SUMMARIZE (outside sidebar) ─────────────────────────
+# WHY outside sidebar? We want the answer to appear in the main chat area,
+# not inside the sidebar. Streamlit buttons set a flag, then we act on it here.
+_pending_question = None
+if st.session_state.get("_summarize"):
+    st.session_state["_summarize"] = False
+    _pending_question = "Provide a detailed summary of the entire document. Cover all key topics and main points from every page."
+    st.session_state["messages"].append({"role": "user", "content": "📝 Summarize this PDF"})
+
 # ─── MAIN AREA: CHAT INTERFACE ───────────────────────────────────
 # WHY session_state for messages? Streamlit re-runs the script on every
 # interaction. Without session_state, chat history would disappear
@@ -85,29 +101,33 @@ if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
 # Display all previous messages (chat history)
-# WHY: After each re-run, we need to re-draw the entire chat history.
 for msg in st.session_state["messages"]:
-    with st.chat_message(msg["role"]):  # "user" or "assistant"
+    with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
 # Chat input box at the bottom of the page
-# WHY st.chat_input? It gives a nice input bar pinned to the bottom,
-# just like ChatGPT. Returns None if empty, or the text if user pressed Enter.
 user_question = st.chat_input("Ask a question about your PDF...")
 
+# If user typed a question, add it to chat history
 if user_question:
-    # 1. Show the user's message immediately
     st.session_state["messages"].append({"role": "user", "content": user_question})
     with st.chat_message("user"):
         st.markdown(user_question)
+    _pending_question = user_question
 
-    # 2. Call our FastAPI backend and show the response
+# ─── CALL BACKEND (works for both chat and summarize) ────────────
+# WHY one shared block? Both "ask a question" and "summarize" do the same
+# thing — send a question to /chat/ and show the answer. DRY principle.
+if _pending_question:
+    # Use top_k=20 for summaries (grab more chunks), 5 for normal questions
+    top_k = 20 if "summary" in _pending_question.lower() or "summarize" in _pending_question.lower() else 5
+
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             try:
                 response = requests.post(
                     f"{API_BASE}/chat/",
-                    json={"question": user_question, "top_k": 5},
+                    json={"question": _pending_question, "top_k": top_k},
                     timeout=120,
                 )
 
@@ -115,12 +135,26 @@ if user_question:
                     data = response.json()
                     answer = data["answer"]
 
-                    # Display the answer
+                    # ─── CONFIDENCE SCORE ─────────────────────────
+                    # WHY show this? It tells the user how much to trust
+                    # the answer. High confidence = chunks closely matched
+                    # the question. Low = LLM might be guessing.
+                    confidence = data.get("confidence", 0)
+                    pct = int(confidence * 100)
+
+                    # Color coding: green (good), orange (okay), red (low)
+                    if pct >= 70:
+                        color = "🟢"
+                    elif pct >= 40:
+                        color = "🟡"
+                    else:
+                        color = "🔴"
+
+                    st.markdown(f"{color} **Confidence: {pct}%**")
+                    st.progress(confidence)  # visual progress bar
+
                     st.markdown(answer)
 
-                    # Show sources in a collapsible section
-                    # WHY expander? Sources are useful but secondary info.
-                    # Hiding them keeps the chat clean.
                     if data.get("sources"):
                         with st.expander("📚 Sources"):
                             for src in data["sources"]:
@@ -133,5 +167,4 @@ if user_question:
                 answer = "❌ Cannot connect to backend. Is the FastAPI server running?"
                 st.error(answer)
 
-    # 3. Save assistant response to chat history
     st.session_state["messages"].append({"role": "assistant", "content": answer})
