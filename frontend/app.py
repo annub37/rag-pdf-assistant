@@ -119,8 +119,10 @@ if user_question:
 # WHY one shared block? Both "ask a question" and "summarize" do the same
 # thing — send a question to /chat/ and show the answer. DRY principle.
 if _pending_question:
-    # Use top_k=20 for summaries (grab more chunks), 5 for normal questions
-    top_k = 20 if "summary" in _pending_question.lower() or "summarize" in _pending_question.lower() else 5
+    # Use top_k=30 for summaries/chapters (grab more chunks), 10 for normal questions
+    q_lower = _pending_question.lower()
+    needs_more_context = any(word in q_lower for word in ["summary", "summarize", "chapter", "section", "overview", "explain all", "entire", "whole"])
+    top_k = 30 if needs_more_context else 10
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
@@ -134,24 +136,6 @@ if _pending_question:
                 if response.status_code == 200:
                     data = response.json()
                     answer = data["answer"]
-
-                    # ─── CONFIDENCE SCORE ─────────────────────────
-                    # WHY show this? It tells the user how much to trust
-                    # the answer. High confidence = chunks closely matched
-                    # the question. Low = LLM might be guessing.
-                    confidence = data.get("confidence", 0)
-                    pct = int(confidence * 100)
-
-                    # Color coding: green (good), orange (okay), red (low)
-                    if pct >= 70:
-                        color = "🟢"
-                    elif pct >= 40:
-                        color = "🟡"
-                    else:
-                        color = "🔴"
-
-                    st.markdown(f"{color} **Confidence: {pct}%**")
-                    st.progress(confidence)  # visual progress bar
 
                     st.markdown(answer)
 

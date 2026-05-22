@@ -12,7 +12,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 class ChatRequest(BaseModel):
     question: str
-    top_k: int = 5
+    top_k: int = 10
 
 
 @router.post("/")

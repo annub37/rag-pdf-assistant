@@ -11,9 +11,14 @@ _collection = _client.get_or_create_collection(
 )
 
 
+# ChromaDB recommends adding no more than ~500 items per call.
+# Larger batches can cause memory spikes and slow indexing.
+_CHROMA_BATCH_SIZE = 500
+
+
 def store_chunks(chunks: list[dict]) -> int:
     """
-    Store chunks with their embeddings in ChromaDB.
+    Store chunks with their embeddings in ChromaDB in batches.
 
     Each chunk dict must have:
       - chunk_id: str
@@ -24,15 +29,17 @@ def store_chunks(chunks: list[dict]) -> int:
 
     Returns the number of chunks stored.
     """
-    _collection.add(
-        ids=[c["chunk_id"] for c in chunks],
-        embeddings=[c["embedding"] for c in chunks],
-        documents=[c["text"] for c in chunks],
-        metadatas=[
-            {"file_id": c["file_id"], "page_number": c["page_number"]}
-            for c in chunks
-        ],
-    )
+    for i in range(0, len(chunks), _CHROMA_BATCH_SIZE):
+        batch = chunks[i : i + _CHROMA_BATCH_SIZE]
+        _collection.add(
+            ids=[c["chunk_id"] for c in batch],
+            embeddings=[c["embedding"] for c in batch],
+            documents=[c["text"] for c in batch],
+            metadatas=[
+                {"file_id": c["file_id"], "page_number": c["page_number"]}
+                for c in batch
+            ],
+        )
     return len(chunks)
 
 
