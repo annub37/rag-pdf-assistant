@@ -2,6 +2,13 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load .env file — check backend/ first, then project root
+_backend_dir = Path(__file__).resolve().parent.parent
+load_dotenv(_backend_dir / ".env")
+load_dotenv(_backend_dir.parent / ".env")
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -13,6 +20,14 @@ class Settings:
     chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "100"))
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
     chroma_dir: str = os.getenv("CHROMA_DIR", "storage/chroma")
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    llm_model: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+
+    # Azure OpenAI settings
+    azure_openai_api_key: str = os.getenv("AZURE_OPENAI_API_KEY", "")
+    azure_openai_endpoint: str = os.getenv("AZURE_OPENAI_ENDPOINT", "")
+    azure_openai_deployment: str = os.getenv("AZURE_OPENAI_DEPLOYMENT", "")
+    azure_openai_api_version: str = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
 
 
 settings = Settings()
