@@ -135,24 +135,6 @@ if _pending_question:
                     data = response.json()
                     answer = data["answer"]
 
-                    # ─── CONFIDENCE SCORE ─────────────────────────
-                    # WHY show this? It tells the user how much to trust
-                    # the answer. High confidence = chunks closely matched
-                    # the question. Low = LLM might be guessing.
-                    confidence = data.get("confidence", 0)
-                    pct = int(confidence * 100)
-
-                    # Color coding: green (good), orange (okay), red (low)
-                    if pct >= 70:
-                        color = "🟢"
-                    elif pct >= 40:
-                        color = "🟡"
-                    else:
-                        color = "🔴"
-
-                    st.markdown(f"{color} **Confidence: {pct}%**")
-                    st.progress(confidence)  # visual progress bar
-
                     st.markdown(answer)
 
                     if data.get("sources"):
