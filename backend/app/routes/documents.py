@@ -15,13 +15,13 @@ PDF_MAGIC_BYTES = b"%PDF-"
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-@router.post("/upload")
-async def upload_document(file: UploadFile):
+async def _process_single_pdf(file: UploadFile) -> dict:
+    """Validate, save, extract, embed, and store a single PDF. Returns a result dict."""
     # ── Guard 1: check the content type header ───────────
     if file.content_type != "application/pdf":
         raise HTTPException(
             status_code=400,
-            detail="Only PDF files are accepted.",
+            detail=f"Only PDF files are accepted. Got '{file.content_type}' for '{file.filename}'.",
         )
 
     # ── Guard 2: read file and enforce size limit ────────
@@ -30,14 +30,14 @@ async def upload_document(file: UploadFile):
     if len(contents) > max_bytes:
         raise HTTPException(
             status_code=413,
-            detail=f"File too large. Maximum allowed size is {settings.max_upload_size_mb} MB.",
+            detail=f"File '{file.filename}' too large. Maximum allowed size is {settings.max_upload_size_mb} MB.",
         )
 
     # ── Guard 3: verify actual file bytes (magic bytes) ──
     if not contents[:5].startswith(PDF_MAGIC_BYTES):
         raise HTTPException(
             status_code=400,
-            detail="File is not a valid PDF. Content does not match PDF format.",
+            detail=f"File '{file.filename}' is not a valid PDF. Content does not match PDF format.",
         )
 
     # ── Generate a unique filename to avoid collisions ───
@@ -79,4 +79,33 @@ async def upload_document(file: UploadFile):
         "total_chunks": len(chunks),
         "stored_in_vectordb": stored_count,
         "embedding_dimensions": len(vectors[0]) if vectors else 0,
+    }
+
+
+@router.post("/upload")
+async def upload_document(file: UploadFile):
+    result = await _process_single_pdf(file)
+    return result
+
+
+@router.post("/upload-multiple")
+async def upload_multiple_documents(files: list[UploadFile]):
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided.")
+
+    results = []
+    errors = []
+    for file in files:
+        try:
+            result = await _process_single_pdf(file)
+            results.append(result)
+        except HTTPException as e:
+            errors.append({"filename": file.filename, "error": e.detail})
+
+    return {
+        "total_files": len(files),
+        "successful": len(results),
+        "failed": len(errors),
+        "results": results,
+        "errors": errors,
     }

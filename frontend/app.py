@@ -35,34 +35,42 @@ st.caption("Upload a PDF, then ask questions about it. Powered by RAG + Azure Op
 # WHY sidebar? The upload control should always be visible but not block
 # the main chat area. Sidebar = persistent left panel.
 with st.sidebar:
-    st.header("📁 Upload PDF")
+    st.header("📁 Upload PDFs")
 
-    # st.file_uploader returns None if nothing uploaded, or a file-like object.
-    uploaded_file = st.file_uploader(
-        "Choose a PDF file",
+    # st.file_uploader returns None if nothing uploaded, or a list of file-like objects.
+    uploaded_files = st.file_uploader(
+        "Choose PDF files",
         type=["pdf"],              # only allow PDFs
-        accept_multiple_files=False,
+        accept_multiple_files=True,
     )
 
     # This button triggers the upload to our FastAPI backend
-    if uploaded_file and st.button("🚀 Upload & Process", use_container_width=True):
+    if uploaded_files and st.button("🚀 Upload & Process", use_container_width=True):
         # WHY st.spinner? It shows a loading animation while we wait.
         # Without it, the user sees nothing and thinks the app is frozen.
-        with st.spinner("Uploading and processing PDF..."):
+        with st.spinner(f"Uploading and processing {len(uploaded_files)} PDF(s)..."):
             try:
-                # Send the PDF to our FastAPI POST /documents/upload endpoint
-                # 'files' is how you send multipart/form-data in requests
+                # Send all PDFs to our FastAPI POST /documents/upload-multiple endpoint
+                files_payload = [
+                    ("files", (f.name, f.getvalue(), "application/pdf"))
+                    for f in uploaded_files
+                ]
                 response = requests.post(
-                    f"{API_BASE}/documents/upload",
-                    files={"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")},
-                    timeout=120,
+                    f"{API_BASE}/documents/upload-multiple",
+                    files=files_payload,
+                    timeout=300,
                 )
 
                 if response.status_code == 200:
-                    result = response.json()
-                    st.success(f"✅ Processed! {result['total_pages']} pages → {result['total_chunks']} chunks")
+                    data = response.json()
+                    st.success(
+                        f"✅ {data['successful']}/{data['total_files']} files processed successfully!"
+                    )
+                    if data["errors"]:
+                        for err in data["errors"]:
+                            st.warning(f"⚠️ {err['filename']}: {err['error']}")
                     # Save to session_state so we remember the upload even after re-runs
-                    st.session_state["last_upload"] = result
+                    st.session_state["last_upload"] = data
                 else:
                     st.error(f"❌ Upload failed: {response.json().get('detail', response.text)}")
             except requests.ConnectionError:
@@ -73,9 +81,16 @@ with st.sidebar:
         st.divider()
         st.subheader("Last Upload")
         info = st.session_state["last_upload"]
-        st.write(f"**File:** {info['original_name']}")
-        st.write(f"**Pages:** {info['total_pages']}")
-        st.write(f"**Chunks:** {info['total_chunks']}")
+        if "results" in info:
+            # Multi-file upload response
+            st.write(f"**Files processed:** {info['successful']}/{info['total_files']}")
+            for r in info["results"]:
+                st.write(f"- **{r['original_name']}**: {r['total_pages']} pages, {r['total_chunks']} chunks")
+        else:
+            # Single-file upload response (backward compat)
+            st.write(f"**File:** {info['original_name']}")
+            st.write(f"**Pages:** {info['total_pages']}")
+            st.write(f"**Chunks:** {info['total_chunks']}")
 
     # ─── SUMMARIZE BUTTON ────────────────────────────────────────
     # WHY always visible? The PDF might have been uploaded via API/terminal,
