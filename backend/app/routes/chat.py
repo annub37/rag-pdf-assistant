@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.services.embedder import embed_single
-from app.services.vector_store import search_similar
+from app.services.vector_store import search_similar, search_balanced
 from app.services.prompt_builder import build_messages
 from app.services.llm import ask_llm
 
@@ -12,7 +12,8 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 class ChatRequest(BaseModel):
     question: str
-    top_k: int = 5
+    top_k: int = 10
+    balanced: bool = False
 
 
 @router.post("/")
@@ -24,7 +25,11 @@ async def chat(body: ChatRequest):
     query_vector = embed_single(body.question)
 
     # Step 2: Retrieve relevant chunks from ChromaDB
-    chunks = search_similar(query_vector, top_k=body.top_k)
+    # Use balanced search for summaries to cover all documents equally
+    if body.balanced:
+        chunks = search_balanced(query_vector, per_doc=body.top_k)
+    else:
+        chunks = search_similar(query_vector, top_k=body.top_k)
 
     if not chunks:
         return {

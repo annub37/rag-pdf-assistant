@@ -18,7 +18,16 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
         [[0.021, -0.045, ...], [0.019, -0.042, ...], ...]
         One vector per input text.
     """
-    vectors = _model.encode(texts)
+    # batch_size=64: process 64 chunks at a time instead of all at once.
+    # This keeps memory low and is faster for large documents.
+    # normalize_embeddings: pre-normalizes vectors so cosine similarity
+    # becomes a simple dot product (faster search later).
+    vectors = _model.encode(
+        texts,
+        batch_size=64,
+        show_progress_bar=True,
+        normalize_embeddings=True,
+    )
     return vectors.tolist()
 
 
