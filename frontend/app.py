@@ -68,7 +68,10 @@ with st.sidebar:
                     )
                     if data["errors"]:
                         for err in data["errors"]:
-                            st.warning(f"⚠️ {err['filename']}: {err['error']}")
+                            if "already been uploaded" in err["error"]:
+                                st.info(f"📄 {err['filename']}: Already uploaded — skipped duplicate.")
+                            else:
+                                st.warning(f"⚠️ {err['filename']}: {err['error']}")
                     # Save to session_state so we remember the upload even after re-runs
                     st.session_state["last_upload"] = data
                 else:
@@ -138,13 +141,15 @@ if _pending_question:
     q_lower = _pending_question.lower()
     needs_more_context = any(word in q_lower for word in ["summary", "summarize", "chapter", "section", "overview", "explain all", "entire", "whole"])
     top_k = 30 if needs_more_context else 10
+    # Use balanced retrieval for broad queries so all documents are covered
+    balanced = needs_more_context
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             try:
                 response = requests.post(
                     f"{API_BASE}/chat/",
-                    json={"question": _pending_question, "top_k": top_k},
+                    json={"question": _pending_question, "top_k": top_k, "balanced": balanced},
                     timeout=120,
                 )
 
@@ -159,7 +164,11 @@ if _pending_question:
                             for src in data["sources"]:
                                 st.write(f"- Page {src['page_number']} (relevance: {1 - src['distance']:.0%})")
                 else:
-                    answer = f"❌ Error: {response.json().get('detail', response.text)}"
+                    try:
+                        detail = response.json().get('detail', response.text)
+                    except Exception:
+                        detail = response.text
+                    answer = f"❌ Error: {detail}"
                     st.error(answer)
 
             except requests.ConnectionError:

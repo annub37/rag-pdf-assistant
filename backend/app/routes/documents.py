@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from pathlib import Path
 
@@ -7,7 +8,7 @@ from app.config import settings
 from app.services.pdf_extractor import extract_text_from_pdf
 from app.services.chunker import chunk_pages
 from app.services.embedder import embed_texts
-from app.services.vector_store import store_chunks
+from app.services.vector_store import find_by_hash, store_chunks
 
 # PDF files always start with these 5 bytes: %PDF-
 PDF_MAGIC_BYTES = b"%PDF-"
@@ -40,6 +41,15 @@ async def _process_single_pdf(file: UploadFile) -> dict:
             detail=f"File '{file.filename}' is not a valid PDF. Content does not match PDF format.",
         )
 
+    # ── Guard 4: check for duplicate file ────────────────
+    file_hash = hashlib.sha256(contents).hexdigest()
+    existing = find_by_hash(file_hash)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"This PDF has already been uploaded (file_id: {existing['file_id']}, {existing['chunk_count']} chunks). Skipping duplicate.",
+        )
+
     # ── Generate a unique filename to avoid collisions ───
     file_id = uuid.uuid4().hex
     safe_name = f"{file_id}.pdf"
@@ -68,7 +78,7 @@ async def _process_single_pdf(file: UploadFile) -> dict:
         chunk["embedding"] = vector
 
     # ── Store chunks + embeddings in ChromaDB ────────────
-    stored_count = store_chunks(chunks)
+    stored_count = store_chunks(chunks, file_hash=file_hash)
 
     return {
         "file_id": file_id,
