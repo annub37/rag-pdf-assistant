@@ -96,11 +96,63 @@ with st.sidebar:
             st.write(f"**Chunks:** {info['total_chunks']}")
 
     # ─── SUMMARIZE BUTTON ────────────────────────────────────────
-    # WHY always visible? The PDF might have been uploaded via API/terminal,
-    # not just through the UI. So we always show this button.
     st.divider()
     if st.button("📝 Summarize PDF", use_container_width=True):
         st.session_state["_summarize"] = True
+
+    # ─── DOCUMENT MANAGEMENT ─────────────────────────────────────
+    st.divider()
+    st.header("📋 Document Library")
+
+    if st.button("🔄 Refresh Document List", use_container_width=True):
+        st.session_state.pop("_doc_list_cache", None)
+
+    # Fetch document list (cached in session to avoid re-fetching on every rerun)
+    if "_doc_list_cache" not in st.session_state:
+        try:
+            resp = requests.get(f"{API_BASE}/documents/", timeout=10)
+            if resp.status_code == 200:
+                st.session_state["_doc_list_cache"] = resp.json()
+            else:
+                st.session_state["_doc_list_cache"] = None
+        except requests.ConnectionError:
+            st.session_state["_doc_list_cache"] = None
+
+    doc_data = st.session_state.get("_doc_list_cache")
+    if doc_data is None:
+        st.caption("Could not load documents.")
+    elif doc_data["total_documents"] == 0:
+        st.caption("No documents uploaded yet.")
+    else:
+        st.caption(f"{doc_data['total_documents']} document(s)")
+        for doc in doc_data["documents"]:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.text(f"📄 {doc['file_id'][:8]}… ({doc['chunk_count']} chunks)")
+            with col2:
+                if st.button("🗑️", key=f"del_{doc['file_id']}", help="Delete this document"):
+                    try:
+                        del_resp = requests.delete(f"{API_BASE}/documents/{doc['file_id']}", timeout=10)
+                        if del_resp.status_code == 200:
+                            st.success("Deleted!")
+                            st.session_state.pop("_doc_list_cache", None)
+                            st.rerun()
+                        else:
+                            st.error(del_resp.json().get("detail", "Delete failed"))
+                    except requests.ConnectionError:
+                        st.error("Cannot connect to backend.")
+
+    # ─── SYSTEM STATUS ───────────────────────────────────────────
+    st.divider()
+    with st.expander("⚙️ System Status"):
+        try:
+            health = requests.get(f"{API_BASE}/health/detailed", timeout=5).json()
+            st.write(f"**Status:** {health['status']}")
+            for dep, info in health.get("dependencies", {}).items():
+                icon = "✅" if info["status"] == "ok" else "⚠️"
+                st.write(f"{icon} **{dep}**: {info['status']}")
+        except Exception:
+            st.write("⚠️ Cannot reach backend")
 
 # ─── HANDLE SUMMARIZE (outside sidebar) ─────────────────────────
 # WHY outside sidebar? We want the answer to appear in the main chat area,

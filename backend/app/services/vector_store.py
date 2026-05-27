@@ -119,3 +119,53 @@ def search_balanced(query_embedding: list[float], per_doc: int = 15) -> list[dic
     # Sort all hits by distance (most relevant first)
     hits.sort(key=lambda h: h["distance"])
     return hits
+
+
+def list_documents() -> list[dict]:
+    """
+    List all unique documents stored in ChromaDB.
+
+    Returns a list of dicts with: file_id, chunk_count, file_hash
+    """
+    all_data = _collection.get(include=["metadatas"])
+    if not all_data["ids"]:
+        return []
+
+    docs: dict[str, dict] = {}
+    for meta in all_data["metadatas"]:
+        fid = meta["file_id"]
+        if fid not in docs:
+            docs[fid] = {
+                "file_id": fid,
+                "chunk_count": 0,
+                "file_hash": meta.get("file_hash", ""),
+            }
+        docs[fid]["chunk_count"] += 1
+
+    return list(docs.values())
+
+
+def delete_by_file_id(file_id: str) -> int:
+    """
+    Delete all chunks belonging to a specific file_id from ChromaDB.
+
+    Returns the number of chunks deleted.
+    """
+    results = _collection.get(
+        where={"file_id": file_id},
+        include=[],
+    )
+    ids_to_delete = results["ids"]
+    if not ids_to_delete:
+        return 0
+
+    _collection.delete(ids=ids_to_delete)
+    return len(ids_to_delete)
+
+
+def get_collection_stats() -> dict:
+    """Return collection statistics for health checks."""
+    return {
+        "total_chunks": _collection.count(),
+        "collection_name": _collection.name,
+    }
