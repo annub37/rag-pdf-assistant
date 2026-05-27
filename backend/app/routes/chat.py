@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.logging_config import logger
 from app.services.embedder import embed_single
 from app.services.vector_store import search_similar, search_balanced
 from app.services.prompt_builder import build_messages
@@ -56,6 +57,11 @@ async def chat(body: ChatRequest):
     avg_confidence = sum(1 - c["distance"] for c in chunks) / len(chunks)
     # Clamp between 0 and 1 (just in case)
     avg_confidence = max(0.0, min(1.0, avg_confidence))
+
+    logger.info(
+        "Chat completed: balanced=%s chunks=%d confidence=%.2f",
+        body.balanced, len(chunks), avg_confidence,
+    )
 
     return {
         "question": body.question,

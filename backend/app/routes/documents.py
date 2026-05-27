@@ -5,10 +5,16 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile
 
 from app.config import settings
+from app.logging_config import logger
 from app.services.pdf_extractor import extract_text_from_pdf
 from app.services.chunker import chunk_pages
 from app.services.embedder import embed_texts
-from app.services.vector_store import find_by_hash, store_chunks
+from app.services.vector_store import (
+    find_by_hash,
+    store_chunks,
+    list_documents,
+    delete_by_file_id,
+)
 
 # PDF files always start with these 5 bytes: %PDF-
 PDF_MAGIC_BYTES = b"%PDF-"
@@ -80,6 +86,11 @@ async def _process_single_pdf(file: UploadFile) -> dict:
     # ── Store chunks + embeddings in ChromaDB ────────────
     stored_count = store_chunks(chunks, file_hash=file_hash)
 
+    logger.info(
+        "Processed PDF: name=%s file_id=%s pages=%d chunks=%d",
+        file.filename, file_id, len(pages), len(chunks),
+    )
+
     return {
         "file_id": file_id,
         "original_name": file.filename,
@@ -119,3 +130,33 @@ async def upload_multiple_documents(files: list[UploadFile]):
         "results": results,
         "errors": errors,
     }
+
+
+@router.get("/")
+async def list_all_documents():
+    """List all uploaded documents with their chunk counts."""
+    docs = list_documents()
+
+    # Enrich with filename from disk if the PDF file still exists
+    upload_dir = Path(settings.upload_dir)
+    for doc in docs:
+        pdf_path = upload_dir / f"{doc['file_id']}.pdf"
+        doc["file_exists"] = pdf_path.exists()
+
+    return {"total_documents": len(docs), "documents": docs}
+
+
+@router.delete("/{file_id}")
+async def delete_document(file_id: str):
+    """Delete a document and its chunks from ChromaDB and disk."""
+    deleted_chunks = delete_by_file_id(file_id)
+    if deleted_chunks == 0:
+        raise HTTPException(status_code=404, detail=f"No document found with file_id '{file_id}'.")
+
+    # Also remove the PDF file from disk if it exists
+    pdf_path = Path(settings.upload_dir) / f"{file_id}.pdf"
+    if pdf_path.exists():
+        pdf_path.unlink()
+
+    logger.info("Deleted document: file_id=%s chunks=%d", file_id, deleted_chunks)
+    return {"file_id": file_id, "deleted_chunks": deleted_chunks}
