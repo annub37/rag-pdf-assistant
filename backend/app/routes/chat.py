@@ -45,7 +45,7 @@ async def chat(body: ChatRequest):
     # Step 4: Send to LLM and get the answer
     answer = ask_llm(messages)
 
-    # Step 5: Return answer with source references + confidence score
+        # Step 5: Return answer with source references
     sources = [
         {"page_number": c["page_number"], "file_id": c["file_id"], "distance": c["distance"]}
         for c in chunks
@@ -66,6 +66,5 @@ async def chat(body: ChatRequest):
     return {
         "question": body.question,
         "answer": answer,
-        "confidence": round(avg_confidence, 4),
         "sources": sources,
     }
